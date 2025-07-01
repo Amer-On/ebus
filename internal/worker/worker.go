@@ -23,16 +23,17 @@ type Message struct {
 }
 
 type Worker struct {
-	ID         string
-	httpClient http.Client
-	logger     *zap.Logger
-	broker     broker.Broker
+	ID             string
+	httpClient     *http.Client
+	logger         *zap.Logger
+	broker         broker.Broker
+	failedMessages int
 }
 
-func NewWorker(logger *zap.Logger, broker broker.Broker) *Worker {
+func NewWorker(logger *zap.Logger, broker broker.Broker, httpClient *http.Client) *Worker {
 	return &Worker{
 		ID:         uuid.NewString(),
-		httpClient: *http.DefaultClient,
+		httpClient: httpClient,
 		logger:     logger,
 		broker:     broker,
 	}
@@ -66,6 +67,7 @@ func (w *Worker) HandleMessage(ctx context.Context, message *domain.Message) err
 	err = w.sendHttpEvent(ctx, message.Subscriber.CallbackAddress, payload, message.IdempotencyKey)
 	if err != nil {
 		w.logger.Error("Failed to send message via http: %v", zap.Error(err))
+		w.failedMessages++
 		return err
 	}
 	return nil

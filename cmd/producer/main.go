@@ -2,13 +2,21 @@ package main
 
 import (
 	"bytes"
-	"ebus/internal/domain"
-	"ebus/pkg/logging"
 	"encoding/json"
 	"io"
 	"net/http"
+	"time"
 
 	"go.uber.org/zap"
+
+	"ebus/internal/domain"
+	"ebus/pkg/logging" // замени на актуальный путь
+)
+
+const (
+	totalMessages = 50000
+	sendDuration  = 10 * time.Second
+	workerCount   = 100
 )
 
 func main() {
@@ -16,16 +24,43 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	defer logger.Sync()
 
-	defer func() {
-		if err := recover(); err != nil {
-			logger.Error("Recovered from panic", zap.Error(err.(error)))
-		}
-		logger.Info("Stopping producer")
-	}()
+	logger.Info("Starting producer")
 
-	logger.Info("Sending request")
-	publishMessage(logger, *http.DefaultClient, nil)
+	transport := &http.Transport{
+		MaxIdleConns:        1000,
+		MaxIdleConnsPerHost: 1000,
+		MaxConnsPerHost:     1000,
+	}
+	client := http.Client{
+		Transport: transport,
+	}
+
+	messageCh := make(chan int, 1000) // буферизированный канал
+
+	// Стартуем воркеры
+	for i := 0; i < workerCount; i++ {
+		go func(id int) {
+			for range messageCh {
+				publishMessage(logger, client)
+			}
+		}(i)
+	}
+
+	// Генерация сообщений с равномерным интервалом
+	interval := sendDuration / totalMessages
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for i := 0; i < totalMessages; i++ {
+		<-ticker.C
+		messageCh <- i
+	}
+
+	// Завершаем
+	close(messageCh)
+	logger.Info("Finished sending all messages")
 }
 
 type Payload struct {
@@ -33,7 +68,7 @@ type Payload struct {
 	Value string `json:"value"`
 }
 
-func publishMessage(logger *zap.Logger, httpClient http.Client, _ *domain.RawEvent) {
+func publishMessage(logger *zap.Logger, httpClient http.Client) {
 	payload := Payload{Data: "Hello", Value: "World"}
 
 	rawPayload, err := json.Marshal(payload)
@@ -63,7 +98,7 @@ func publishMessage(logger *zap.Logger, httpClient http.Client, _ *domain.RawEve
 		panic("Error reading body")
 	}
 
-	logger.Info("Message published", zap.String("body", string(body)))
+	logger.Debug("Message published", zap.String("body", string(body)))
 
 	if response.StatusCode != http.StatusOK {
 		panic("Invalid status code" + response.Status)

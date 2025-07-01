@@ -71,11 +71,11 @@ func (b *RedisStreamsBroker) processMessages(ctx context.Context, callbackFuncti
 				Group:    b.consumerGroup,
 				Consumer: consumerName,
 				Streams:  []string{topic, ">"},
-				Count:    10,
+				Count:    100,
 				Block:    5 * time.Millisecond,
 			}).Result()
-
 			switch err {
+			case nil:
 			case redis.Nil:
 				b.logger.Debug("No messages available")
 			default:
