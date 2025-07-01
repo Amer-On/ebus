@@ -1,0 +1,11 @@
+redis:
+  host: localhost
+  port: 5432
+  password:
+  db:
+server:
+  host: localhost
+  port: 10000
+broker:
+  read_batch_size: 10
+  sleep_time_ms: 500

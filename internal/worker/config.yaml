@@ -1,0 +1,8 @@
+redis:
+  host: localhost
+  port: 6379
+  password:
+  db:
+broker:
+  read_batch_size: 10
+  sleep_time_ms: 10
